@@ -4,7 +4,7 @@
 # > Mail: sszllzss@foxmail.com
 # > Blog: sszlbg.cn
 # > Created Time: 2018-10-01 21:32:36
-# > Revise Time: 2018-10-07 21:54:52
+# > Revise Time: 2018-10-17 11:42:31
  ************************************************************************/
 #include<iostream>
 #include<time.h>
@@ -171,7 +171,7 @@ int DataBase::AddSensor(std::string user, std::string sensorID , std::string key
         return  rec;
     std::string sql;
     sql = "INSERT INTO user_sensor(`user`, sensorID, `key`) VALUES( '" 
-        + user + "','" + sensorID + "')"; 
+        + user + "','" + sensorID + "','" + key +"')"; 
     if(mysqlDB->QueryNoRec(sql) > 0)
         rec = 0;
     return rec;
@@ -241,8 +241,9 @@ int DataBase::DelSensor(std::string sensorID)
     if(sensorID.empty())
         return rec;
     std::string sql;
-    sql = "DELETE FROM user_sensor WHERE sensorID='" + sensorID + "';\r\n";
-    sql += "DELETE FROM user_sensor WHERE sensorID='" + sensorID + "';"; 
+    sql = "DELETE FROM data_table WHERE sensorID='" + sensorID + "'";
+    mysqlDB->QueryNoRec(sql);
+    sql = "DELETE FROM user_sensor WHERE sensorID='" + sensorID + "'"; 
     if(mysqlDB->QueryNoRec(sql) > 0)
         rec = 0;
     return rec;
@@ -336,8 +337,8 @@ Mysql_Res * DataBase::GetUserAllSensorRes(std::string user,std::string startDate
     struct tm tmTemp;
     if(user.empty() ||  startDate.empty() || endDate.empty())
         return rec;
-    sql = "SELECT A.sensorID,A.illumination,A.humidity,A.temperature,A.date_timer FROM data_table A INNER JOIN (SELECT sensorID FROM user_sensor WHERE `user`='" + user +"') B ON (A.sensorID = B.sensorID)";
-    if(!(startDate.compare("0000-00-00 00:00:00") && endDate.compare("0000-00-00 00:00:00")))
+    sql = "SELECT A.sensorID IdCode,A.illumination,A.humidity,A.temperature,A.date_timer `date` FROM data_table A INNER JOIN (SELECT sensorID FROM user_sensor WHERE `user`='" + user +"') B ON (A.sensorID = B.sensorID)";
+    if(! (strcmp(startDate.c_str(),"0000-00-00 00:00:00") == 0 && (strcmp(endDate.c_str() ,"0000-00-00 00:00:00") == 0)))
     {
         if(strptime(startDate.c_str(), "%Y-%m-%d %H:%M:%S", &tmTemp) == NULL || strptime(endDate.c_str(), "%Y-%m-%d %H:%M:%S", &tmTemp) == NULL)
             return  rec;
@@ -354,8 +355,8 @@ Mysql_Res * DataBase::GetSensorRes(std::string sensorID, std::string startDate ,
     struct tm tmTemp;
     if(sensorID.empty() ||  startDate.empty() || endDate.empty())
         return rec;
-    sql = "SELECT A.sensorID,A.illumination,A.humidity,A.temperature,A.date_timer FROM data_table A WHERE A.sensorID='"+ sensorID +"'";
-    if(!(startDate.compare("0000-00-00 00:00:00") && endDate.compare("0000-00-00 00:00:00")))
+    sql = "SELECT A.sensorID IdCode,A.illumination,A.humidity,A.temperature,A.date_timer `date` FROM data_table A WHERE A.sensorID='"+ sensorID +"'";
+    if(! (strcmp(startDate.c_str(),"0000-00-00 00:00:00") == 0 && (strcmp(endDate.c_str() ,"0000-00-00 00:00:00") == 0)))
     {
         if(strptime(startDate.c_str(), "%Y-%m-%d %H:%M:%S", &tmTemp) == NULL || strptime(endDate.c_str(), "%Y-%m-%d %H:%M:%S", &tmTemp) == NULL)
             return  rec;
