@@ -4,7 +4,7 @@
 # > Mail: sszllzss@foxmail.com
 # > Blog: sszlbg.cn
 # > Created Time: 2018-10-01 21:32:36
-# > Revise Time: 2018-10-05 15:50:06
+# > Revise Time: 2018-10-17 11:09:36
  ************************************************************************/
 #include<iostream>
 #include<string.h>
@@ -73,7 +73,10 @@ MysqlDB::MysqlDB(const char *db, const char * user, const char *passwd,const cha
 
     }while(0);
     if(!err_str.empty())
+    {
+        Free();
         throw err_str;
+    }
 }
 Mysql_Res * MysqlDB::QueryRecRes(std::string sql)
 {
@@ -383,8 +386,7 @@ int MysqlDB::QueryNoRec(std::string sql)
         throw err_str;
     return rowcount;
 }
-
-MysqlDB::~MysqlDB()
+void MysqlDB::Free()
 {
     lock();
     if(this->dbname == NULL)
@@ -419,6 +421,11 @@ MysqlDB::~MysqlDB()
         return;
     }
     MysqlDB_connect_num_lock.unlock();
+
+}
+MysqlDB::~MysqlDB()
+{
+    Free();
 }
 void MysqlDB::set_connect_timeout(int connect_timeout)
 {
@@ -794,13 +801,12 @@ Mysql_Res::~Mysql_Res()
 {
     lock();
     std::map<std::string , Mysql_strList *>::iterator i = this->rows->begin();
-    for(;i != this->end();i++)
+    for(;i != this->rows->end();i++)
     {
         if(i->second != NULL)
             delete i->second;
     }
     delete rows;
-    unlock();
 }
 Mysql_Res::iterator Mysql_Res::begin()
 {

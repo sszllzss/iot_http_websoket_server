@@ -150,6 +150,7 @@ private:
     char *dbname;
     MYSQL * connect();
     void close_conn(MYSQL * mysql);
+    void Free();
 public:
     MysqlDB(const char *db, const char * user, const char *passwd,const char *host = "localhost", const int port = 3306, int min_connect_num = 4, int max_connect_num = 1000, int connect_timeout = 3000); 
     void set_connect_timeout(int connect_timeout);
