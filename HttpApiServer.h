@@ -1,10 +1,10 @@
 /*************************************************************************
-# > File Name: HttpApiServer.h
+# > File Name: /home/sszl/Src/IotHttpWebsocketServer/HttpApiServer.h
 # > Author: SSZL
 # > Mail: sszllzss@foxmail.com
 # > Blog: sszlbg.cn
 # > Created Time: 2018-10-09 18:04:59
-# > Revise Time: 2018-10-17 12:19:19
+# > Revise Time: 2018-10-22 11:00:39
  ************************************************************************/
 
 #ifndef _HTTPAPISERVER_H
@@ -14,6 +14,7 @@
 #include "database.h"
 #include <signal.h>
 #include <map>
+#include "TcpConnectPool.h"
 class HttpApiServerException
 {
     friend class HttpApiServer;
@@ -46,6 +47,7 @@ public:
     /* 异常 */
     HttpApiServerException error;
 private:
+    TcpConnectPool *sensingTcpPool;
     httpServer_t *httpServer;
     pthread_t listen_th;
     struct event_base *listen_base;

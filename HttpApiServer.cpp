@@ -4,7 +4,7 @@
 # > Mail: sszllzss@foxmail.com
 # > Blog: sszlbg.cn
 # > Created Time: 2018-10-09 18:04:49
-# > Revise Time: 2018-10-17 12:19:16
+# > Revise Time: 2018-10-22 17:18:20
  ************************************************************************/
 
 #include<iostream>
@@ -836,6 +836,31 @@ void ev_time_inspect_cb(evutil_socket_t fd, short events, void *arg)
     httpApiServer->userList.unlock();
 
 }
+void HttpApiServer_sensing_read_cb(TcpConnectPool::IpPort_t & ipPort, bufferevent * bev, TcpConnectPool * tcpConnectPool)
+{
+    char  buff[1024];
+    int len = bufferevent_read(bev, buff, 1024);
+    buff[len]= 0;
+    printf("%s:%d %s\r\n",ipPort.ip, ipPort.port, buff);
+    bufferevent_write(bev, buff,strlen(buff));
+}
+void HttpApiServer_sensing_write_cb(TcpConnectPool::IpPort_t & ipPort, bufferevent * bev, TcpConnectPool * tcpConnectPool)
+{
+    printf("%s:%d 测试\r\n",ipPort.ip, ipPort.port);
+
+}
+void HttpApiServer_sensing_connect_cb(TcpConnectPool::IpPort_t & ipPort, bufferevent * bev, TcpConnectPool * tcpConnectPool)
+{
+    printf("%s:%d connect!\r\n",ipPort.ip, ipPort.port);
+}
+void HttpApiServer_sensing_disconnect_cb(TcpConnectPool::IpPort_t & ipPort, TcpConnectPool * tcpConnectPool)
+{
+    printf("%s:%d disconnect!\r\n",ipPort.ip, ipPort.port);
+}
+void HttpApiServer_sensing_error_cb(TcpConnectPool * tcpConnectPool, TcpConnectPool::ErrorType errorType, std::string &err_str)
+{
+    
+}
 void ws_read_cb(struct httpChilent_t * httpChilent)
 {
     HttpApiServer *httpApiServer = (HttpApiServer *) httpServer_getArg(httpChilent->httpServer);
@@ -990,6 +1015,23 @@ HttpApiServer::HttpApiServer(u_short port)
         httpServer_setArg(httpServer, this);
         httpServer_setHttpHandler(httpServer, httpHandler_cb);
         httpServer_setWebSocket_read_cb(httpServer, ws_read_cb, "/connect-sensing");
+        
+        try
+        {
+            this->sensingTcpPool = new TcpConnectPool(this->main_base, 6666, HttpApiServer_sensing_read_cb, HttpApiServer_sensing_connect_cb, HttpApiServer_sensing_disconnect_cb);
+            this->sensingTcpPool->Set_Wirter_cb(HttpApiServer_sensing_write_cb);
+            this->sensingTcpPool->Set_Error_cb(HttpApiServer_sensing_error_cb);
+        }
+        catch(std::string err_str) 
+        {
+            httpServer_free(this->httpServer);
+            event_base_free(this->listen_base);
+            event_base_free(this->main_base);
+            error.IsException = true;
+            error.errorType = HttpApiServerException::ErrorType::COMMONLY_ERROR;
+            error.err_str = "new TcpConnectPool fail:" +err_str;
+            break;
+        }
 
         pthread_attr_t attr;
         pthread_attr_init(&attr);
@@ -1000,11 +1042,13 @@ HttpApiServer::HttpApiServer(u_short port)
         {
             httpServer_free(this->httpServer);
             event_base_free(this->listen_base);
+            event_base_free(this->main_base);
             error.IsException = true;
             error.errorType = HttpApiServerException::ErrorType::COMMONLY_ERROR;
             error.err_str = "listen_th thread create fail!";
             break;
         }
+        
         /*检查定时器 */
         event_assign(&ev_time_inspect, main_base, -1, EV_PERSIST, ev_time_inspect_cb, this);
         struct timeval tv;
@@ -1023,6 +1067,10 @@ HttpApiServer::~HttpApiServer()
     if(httpServer != NULL)
     {
         httpServer_free(httpServer);
+    }
+    if(sensingTcpPool != NULL)
+    {
+        delete sensingTcpPool;
     }
     if(listen_base != 0)
     {
