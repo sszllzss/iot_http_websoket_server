@@ -10,7 +10,7 @@ libevent_include = /usr/include
 libmysqlclient_include = /usr/include
 
 app:test
-test:test.o CMutex.o mysql_db.o database.o HttpApiServer.o ./CJsonObject/cJSON.o ./CJsonObject/CJsonObject.o ./Http_websocket/ev_httpd.o ./Http_websocket/ev_websocket.o ./Http_websocket/evbase_threadpool.o ./Http_websocket/Threadpool.o ./Http_websocket/config.o
+test:test.o CMutex.o mysql_db.o database.o HttpApiServer.o ./CJsonObject/cJSON.o ./CJsonObject/CJsonObject.o ./Http_websocket/ev_httpd.o ./Http_websocket/ev_websocket.o ./Http_websocket/evbase_threadpool.o ./Http_websocket/Threadpool.o ./Http_websocket/config.o TcpConnectPool.o
 	$(CC) $^ -std=c++11 -o $@  -lpthread -L $(libevent_path) -levent -L $(libopenssl_path) -lcrypto -lssl -L $(libmysqlclient_path) -lmysqlclient -g 
 db_test:CMutex.o mysql_db.o database.o db_test.o
 	$(CC) $^ -std=c++11 -o $@ -lpthread -L $(libmysqlclient_path) -lmysqlclient
