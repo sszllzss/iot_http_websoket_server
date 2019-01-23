@@ -4,7 +4,7 @@
 # > Mail: sszllzss@foxmail.com
 # > Blog: sszlbg.cn
 # > Created Time: 2018-10-17 12:20:36
-# > Revise Time: 2018-10-22 17:19:04
+# > Revise Time: 2018-11-01 11:25:52
  ************************************************************************/
 
 #ifndef _TCPCONNECTPOOL_H
@@ -22,6 +22,8 @@ friend void TcpConnectPool_accept_error_cb(struct evconnlistener *listener, void
 friend void TcpConnectPool_bufferev_event_cb(struct bufferevent *  bev, short events, void * arg);
 friend void TcpConnectPool_bufferev_read_cb(bufferevent * bev, void *arg);
 friend void TcpConnectPool_bufferev_write_cb(bufferevent * bev, void *arg);
+friend void *TcpConnectPool_threadPool_fun(void * arg);
+friend void *TcpConnectPool_colesConnect(void * arg);
 private:
     evbase_threadpool_t *tcp_ev_threadpool;        
     struct evconnlistener * listener;
@@ -31,6 +33,8 @@ private:
     event ev_time_inspect;
     std::map<std::string , bufferevent *> bevMap_ip;
     std::map<bufferevent *, std::string> bevMap_bev;
+
+    void * cb_arg;
 private:
     void AddTcpClient(std::string ip , int port, bufferevent * bev);
     void DelTcpCilent(std::string ip, int port);
@@ -67,11 +71,6 @@ public:
     }Thread_fun_arg_cb_arg_t;
     typedef struct
     {
-        IpPort_t  ipPort;
-        TcpConnectPool * tcpConnectPool;
-    }Thread_fun_arg_disconnect_cb_arg_t;
-    typedef struct
-    {
         TcpConnectPool * tcpConnectPool;
         ErrorType error;
         char *  err_str;
@@ -83,18 +82,27 @@ public:
         THREADPOOL_FUN_TYPE fun_type;
     }Threadpool_fun_arg_t;
     ErrorType error;
-    typedef void (*TcpRead_cb_t)(IpPort_t & ipPort,bufferevent * buff, TcpConnectPool * tcpConnectPool);
-    typedef void (*TcpWirter_cb_t)(IpPort_t & ipPort,bufferevent * buff, TcpConnectPool * tcpConnectPool);
-    typedef void (*TcpDisConnect_cb_t)(IpPort_t & ipPort, TcpConnectPool * tcpConnectPool);
-    typedef void (*TcpConnect_cb_t)(IpPort_t & ipPort, bufferevent * evb, TcpConnectPool * tcpConnectPool);
-    typedef void (*TcpError_cb_t)(TcpConnectPool * tcpConnectPool, ErrorType error, std::string & err_str);
+    typedef void (*TcpRead_cb_t)(IpPort_t & ipPort,bufferevent * buff, TcpConnectPool * tcpConnectPool ,    void *arg);
+    typedef void (*TcpWirter_cb_t)(IpPort_t & ipPort,bufferevent * buff, TcpConnectPool * tcpConnectPool, void *arg);
+    typedef void (*TcpDisConnect_cb_t)(IpPort_t & ipPort,bufferevent * evb, TcpConnectPool * tcpConnectPool, void *arg);
+    typedef void (*TcpConnect_cb_t)(IpPort_t & ipPort, bufferevent * evb, TcpConnectPool * tcpConnectPool, void *arg);
+    typedef void (*TcpError_cb_t)(TcpConnectPool * tcpConnectPool, ErrorType error, std::string & err_str, void *arg);
 public:
-    TcpConnectPool(event_base * base, int port, TcpConnectPool::TcpRead_cb_t read_cb, TcpConnect_cb_t disConnect_cb = NULL, TcpDisConnect_cb_t connect_cb = NULL);
+    TcpConnectPool(event_base * base, int port, void * cb_arg,TcpConnectPool::TcpRead_cb_t read_cb, TcpConnect_cb_t disConnect_cb = NULL, TcpDisConnect_cb_t connect_cb = NULL);
     ~TcpConnectPool();
      IpPort_t * GetIpPort(struct bufferevent * bev);
      struct bufferevent *GetBev(IpPort_t & ipPort);
      void Set_Error_cb(TcpError_cb_t error_cb);
      void Set_Wirter_cb(TcpWirter_cb_t error_cb);
+     void ColesConnect(bufferevent * bev);
+     void ColesConnect(IpPort_t & ipPort);
+     void ColesConnect(std::string ip, int port);
+     threadpool_t * GetThreadpool();
+     void WriteData(bufferevent *bev,const char *buff, size_t size);
+     void WriteData(IpPort_t & ipPort,const char *buff, size_t size);
+     void WriteData(std::string ip, int port,const char *buff, size_t size);
+
+     static std::string ErrorTypeToString(ErrorType error);
 private:
     TcpRead_cb_t read_cb;
     TcpWirter_cb_t wirter_cb;
@@ -102,7 +110,7 @@ private:
     TcpConnect_cb_t connect_cb;
     TcpError_cb_t error_cb;
     void AddTreadCbFun(THREADPOOL_FUN_TYPE type, IpPort_t & ipPort, bufferevent * bev);
-    void AddTreadDisConnectCbFun(IpPort_t & ipPort);
     void AddThredErrorCbFun( ErrorType error, std::string err_str);
+    void WriteDataNoCheck(bufferevent *bev,const char *buff, size_t size);
 };
 #endif

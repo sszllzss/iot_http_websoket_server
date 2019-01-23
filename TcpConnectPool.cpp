@@ -4,7 +4,7 @@
 # > Mail: sszllzss@foxmail.com
 # > Blog: sszlbg.cn
 # > Created Time: 2018-10-17 12:20:30
-# > Revise Time: 2018-10-22 17:18:11
+# > Revise Time: 2018-11-04 16:52:54
  ************************************************************************/
 
 #include<iostream>
@@ -36,27 +36,29 @@ void TcpConnectPool_bufferev_event_cb(struct bufferevent *  bev, short events, v
     std::string err_str;
     TcpConnectPool::IpPort_t *ipPort = NULL;
     ipPort = tcpConnectPool->GetIpPort(bev); 
-    if(events == BEV_EVENT_ERROR)
+    if(events & BEV_EVENT_ERROR)
     {
         int err = EVUTIL_SOCKET_ERROR();
         err_str = ipPort->ip + std::to_string(ipPort->port) + "] ";
         err_str += "Got an error"+std::to_string(err) +" ("+  evutil_socket_error_to_string(err) +") on the Connect.connect close.";
         tcpConnectPool->AddThredErrorCbFun(TcpConnectPool::ErrorType::ERROR_CONNECT, err_str);
     }
-    else if(events == BEV_EVENT_EOF)
+    else if(events & BEV_EVENT_EOF)
     {
 
     }
     else
     {
+
         err_str = ipPort->ip + std::to_string(ipPort->port) + "] ";
-        err_str += "Unkowon error!";
+        err_str += "Unkowon error! ";
         tcpConnectPool->AddThredErrorCbFun(TcpConnectPool::ErrorType::ERROR_UNKNOWO, err_str);
     }
     tcpConnectPool->DelTcpCilent(bev);
     bufferevent_lock(bev);
+    bufferevent_unlock(bev);
     bufferevent_free(bev);
-    tcpConnectPool->AddTreadDisConnectCbFun(*ipPort);
+    tcpConnectPool->AddTreadCbFun(TcpConnectPool::THREADPOOL_FUN_TYPE::DISCONNECT_CB,*ipPort,bev);
     free(ipPort);
 }
 void *TcpConnectPool_threadPool_fun(void * arg)
@@ -70,8 +72,9 @@ void *TcpConnectPool_threadPool_fun(void * arg)
     TcpConnectPool::Thread_fun_arg_cb_arg_t *arg_cb = (TcpConnectPool::Thread_fun_arg_cb_arg_t *)fun_arg->arg;
     TcpConnectPool::TcpWirter_cb_t wirter_cb = (TcpConnectPool::TcpWirter_cb_t)fun_arg->fun;
     TcpConnectPool::TcpConnect_cb_t connect_cb = (TcpConnectPool::TcpConnect_cb_t)fun_arg->fun;
+    /****    bev 参数是 野指针 只能 用于 标识 ****/
     TcpConnectPool::TcpDisConnect_cb_t disconnect_cb = (TcpConnectPool::TcpDisConnect_cb_t)fun_arg->fun;
-    TcpConnectPool::Thread_fun_arg_disconnect_cb_arg_t *arg_disconnect_cb = (TcpConnectPool::Thread_fun_arg_disconnect_cb_arg_t *)fun_arg->arg;
+    /*********************************************/
     TcpConnectPool::TcpError_cb_t error_cb = (TcpConnectPool::TcpError_cb_t)fun_arg->fun;
     TcpConnectPool::Thread_fun_arg_error_cb_arg_t *arg_error_cb = (TcpConnectPool::Thread_fun_arg_error_cb_arg_t *)fun_arg->arg;
     std::string err_str;
@@ -84,22 +87,22 @@ void *TcpConnectPool_threadPool_fun(void * arg)
     switch(fun_arg->fun_type)
     {
     case TcpConnectPool::READ_CB:
-        bufferevent_lock(arg_cb->bev);
-        read_cb(arg_cb->ipPort, arg_cb->bev, arg_cb->tcpConnectPool);
-        bufferevent_unlock(arg_cb->bev);
+        //bufferevent_lock(arg_cb->bev);
+        read_cb(arg_cb->ipPort, arg_cb->bev, arg_cb->tcpConnectPool , arg_cb->tcpConnectPool->cb_arg);
+        //bufferevent_unlock(arg_cb->bev);
         break;
     case TcpConnectPool::WIRTER_CB:
-        bufferevent_lock(arg_cb->bev);
-        wirter_cb(arg_cb->ipPort, arg_cb->bev, arg_cb->tcpConnectPool);
-        bufferevent_unlock(arg_cb->bev);
+        //bufferevent_lock(arg_cb->bev);
+        wirter_cb(arg_cb->ipPort, arg_cb->bev, arg_cb->tcpConnectPool, arg_cb->tcpConnectPool->cb_arg);
+        //bufferevent_unlock(arg_cb->bev);
         break;
     case TcpConnectPool::CONNECT_CB:
-        bufferevent_lock(arg_cb->bev);
-        connect_cb(arg_cb->ipPort, arg_cb->bev, arg_cb->tcpConnectPool);
-        bufferevent_unlock(arg_cb->bev);
+        //bufferevent_lock(arg_cb->bev);
+        connect_cb(arg_cb->ipPort, arg_cb->bev, arg_cb->tcpConnectPool, arg_cb->tcpConnectPool->cb_arg);
+        //bufferevent_unlock(arg_cb->bev);
         break;
     case TcpConnectPool::DISCONNECT_CB:
-        disconnect_cb(arg_disconnect_cb->ipPort, arg_disconnect_cb->tcpConnectPool);
+        disconnect_cb(arg_cb->ipPort, arg_cb->bev, arg_cb->tcpConnectPool, arg_cb->tcpConnectPool->cb_arg);
         break;
     case TcpConnectPool::ERROR_CB:
         if(arg_error_cb->err_str != NULL)
@@ -111,7 +114,7 @@ void *TcpConnectPool_threadPool_fun(void * arg)
         {
             err_str = "Unknown error!";
         }
-        error_cb(arg_error_cb->tcpConnectPool, arg_error_cb->error,err_str);
+        error_cb(arg_error_cb->tcpConnectPool, arg_error_cb->error,err_str, arg_error_cb->tcpConnectPool->cb_arg);
         break;
     }
     free(fun_arg->arg);
@@ -215,21 +218,21 @@ void TcpConnectPool_time_inspect_cb(evutil_socket_t fd, short events, void *arg)
                 int err = EVUTIL_SOCKET_ERROR();
                 err_str = "Got an error"+std::to_string(err) +" ("+  evutil_socket_error_to_string(err) +") on the listener. Shutting down.";
                 tcpConnectPool->unlock();
-                tcpConnectPool->error_cb(tcpConnectPool,tcpConnectPool->error,  err_str);
+                tcpConnectPool->error_cb(tcpConnectPool,tcpConnectPool->error,  err_str, tcpConnectPool->cb_arg);
                 return;
             }
             else if(tcpConnectPool->error == TcpConnectPool::ErrorType::ERROR_BASE_BREAK)
             {
                 err_str = "listener_thread break!";
                 tcpConnectPool->unlock();
-                tcpConnectPool->error_cb(tcpConnectPool,TcpConnectPool::ErrorType::ERROR_BASE_BREAK ,  err_str);
+                tcpConnectPool->error_cb(tcpConnectPool,TcpConnectPool::ErrorType::ERROR_BASE_BREAK ,  err_str, tcpConnectPool->cb_arg);
                 return;
             }
             else
             {
                 err_str = "Unkowon error!";
                 tcpConnectPool->unlock();
-                tcpConnectPool->error_cb(tcpConnectPool,TcpConnectPool::ErrorType::ERROR_BASE_BREAK ,  err_str);
+                tcpConnectPool->error_cb(tcpConnectPool,TcpConnectPool::ErrorType::ERROR_BASE_BREAK ,  err_str, tcpConnectPool->cb_arg);
                 return;
 
             }
@@ -257,43 +260,13 @@ void TcpConnectPool::AddThredErrorCbFun( ErrorType error, std::string err_str)
                         fun_arg->arg = cb_arg;
                         cb_arg->tcpConnectPool = this;
                         cb_arg->error = error;
-                        cb_arg->err_str =  (char *)malloc(err_str.size());
+                        cb_arg->err_str =  (char *)malloc(err_str.size() + 1);
                         if(cb_arg->err_str != NULL)
                             strcpy(cb_arg->err_str, err_str.c_str());
+                        cb_arg->err_str[err_str.size()] = 0;
                         threadpool_add(evbase_threadpool_get_threadpool(this->tcp_ev_threadpool), TcpConnectPool_threadPool_fun, fun_arg);
                     }
                 }
-
-
-    
-}
-void TcpConnectPool::AddTreadDisConnectCbFun(IpPort_t &ipPort)
-{
-                TcpConnectPool::Threadpool_fun_arg_t *fun_arg;
-                fun_arg = (TcpConnectPool::Threadpool_fun_arg_t *)malloc(sizeof(TcpConnectPool::Threadpool_fun_arg_t));
-                if(fun_arg)
-                {
-                    fun_arg->fun = (void *)this->disConnect_cb;
-                    if(fun_arg->fun==NULL)
-                    {
-                        free(fun_arg);
-                        return;
-                    }
-                    fun_arg->fun_type = DISCONNECT_CB;
-                    TcpConnectPool::Thread_fun_arg_disconnect_cb_arg_t *cb_arg;
-                    cb_arg = (TcpConnectPool::Thread_fun_arg_disconnect_cb_arg_t *)malloc(sizeof(TcpConnectPool::Thread_fun_arg_disconnect_cb_arg_t));
-                    if(cb_arg)
-                    {
-                        fun_arg->arg = cb_arg;
-                        cb_arg->tcpConnectPool = this;
-                        cb_arg->ipPort.port = ipPort.port;
-                        strcpy(cb_arg->ipPort.ip, ipPort.ip);
-                        threadpool_add(evbase_threadpool_get_threadpool(this->tcp_ev_threadpool), TcpConnectPool_threadPool_fun, fun_arg);
-                    }
-                }
-
-
-    
 }
 void TcpConnectPool::AddTreadCbFun(TcpConnectPool::THREADPOOL_FUN_TYPE type, IpPort_t & ipPort, bufferevent * bev)
 {
@@ -313,6 +286,8 @@ void TcpConnectPool::AddTreadCbFun(TcpConnectPool::THREADPOOL_FUN_TYPE type, IpP
                         fun_arg->fun = (void *)this->connect_cb;
                         break;
                     case DISCONNECT_CB:
+                        fun_arg->fun = (void *)this->disConnect_cb;
+                        break;
                     case ERROR_CB:
                         free(fun_arg);
                         return;
@@ -337,7 +312,7 @@ void TcpConnectPool::AddTreadCbFun(TcpConnectPool::THREADPOOL_FUN_TYPE type, IpP
                 }
 
 }
-TcpConnectPool::TcpConnectPool(event_base * base,  int port, TcpConnectPool::TcpRead_cb_t read_cb,TcpConnectPool::TcpConnect_cb_t connect_cb,TcpConnectPool::TcpDisConnect_cb_t disConnect_cb)
+TcpConnectPool::TcpConnectPool(event_base * base,  int port, void * cb_arg, TcpConnectPool::TcpRead_cb_t read_cb,TcpConnectPool::TcpConnect_cb_t connect_cb,TcpConnectPool::TcpDisConnect_cb_t disConnect_cb)
 {
     std::string err_str;
     do{
@@ -351,6 +326,7 @@ TcpConnectPool::TcpConnectPool(event_base * base,  int port, TcpConnectPool::Tcp
         this->connect_cb = connect_cb;
         this->disConnect_cb = disConnect_cb;
         this->error = TcpConnectPool::ErrorType::NOT_ERROE;
+        this->cb_arg = cb_arg;
         this->listener_base = event_base_new();
         if(this->listener_base == NULL)
         {
@@ -431,6 +407,72 @@ void TcpConnectPool::Set_Error_cb(TcpError_cb_t error_cb)
     this->error_cb = error_cb;
     unlock();
 }
+struct TcpConnectPool_colesConnect_arg
+{
+    bufferevent * bev;
+    TcpConnectPool * tcpConnectPool;
+};
+void *TcpConnectPool_colesConnect(void * arg)
+{
+    struct TcpConnectPool_colesConnect_arg * fun_arg = (struct TcpConnectPool_colesConnect_arg *)arg;
+    if(fun_arg != NULL)
+    {
+        TcpConnectPool_bufferev_event_cb(fun_arg->bev,BEV_EVENT_EOF , fun_arg->tcpConnectPool);
+        free(fun_arg);
+    }
+    return NULL;
+}
+void TcpConnectPool::ColesConnect(bufferevent * bev)
+{
+    struct TcpConnectPool_colesConnect_arg * fun_arg = (struct TcpConnectPool_colesConnect_arg *)malloc(sizeof(struct TcpConnectPool_colesConnect_arg));
+    fun_arg->bev = bev;
+    fun_arg->tcpConnectPool = this;
+    threadpool_add(GetThreadpool(), TcpConnectPool_colesConnect, fun_arg);
+}
+void TcpConnectPool::ColesConnect(IpPort_t & ipPort)
+{
+    bufferevent *bev = GetBev(ipPort);
+    ColesConnect(bev);
+}
+void TcpConnectPool::ColesConnect(std::string ip, int port)
+{
+    IpPort_t ipPort;
+    strcpy(ipPort.ip, ip.c_str());
+    ipPort.port = port;
+    ColesConnect(ipPort);
+}
+void TcpConnectPool::WriteDataNoCheck(bufferevent *bev,const char *buff, size_t size)
+{
+    bevMap_lock.lock();
+    bufferevent_lock(bev);
+    bufferevent_write(bev,buff,size);
+    bufferevent_unlock(bev);
+    bevMap_lock.unlock();
+}
+void TcpConnectPool::WriteData(bufferevent *bev,const char *buff, size_t size)
+{
+    bevMap_lock.lock();
+    std::map<bufferevent *, std::string>::iterator i = bevMap_bev.find(bev);
+    if(i != bevMap_bev.end())
+    {
+        bufferevent_lock(bev);
+        bufferevent_write(bev,buff,size);
+        bufferevent_unlock(bev);
+    }
+    bevMap_lock.unlock();
+}
+void TcpConnectPool::WriteData(IpPort_t & ipPort,const char *buff, size_t size)
+{
+    bufferevent *bev = GetBev(ipPort);
+    WriteDataNoCheck(bev, buff, size);
+}
+void TcpConnectPool::WriteData(std::string ip, int port,const char *buff, size_t size)
+{
+    IpPort_t ipPort;
+    strcpy(ipPort.ip, ip.c_str());
+    ipPort.port = port;
+    WriteData(ipPort, buff, size);
+}
 void TcpConnectPool::AddTcpClient(std::string ip,int port, bufferevent * bev)
 {
     std::string Str = ip + ":" + std::to_string(port);
@@ -496,4 +538,38 @@ struct bufferevent *TcpConnectPool::GetBev(TcpConnectPool::IpPort_t & ipPort)
     }
     bevMap_lock.unlock();
     return bev;
+}
+threadpool_t * TcpConnectPool::GetThreadpool()
+{
+    threadpool_t * thread = evbase_threadpool_get_threadpool(this->tcp_ev_threadpool);
+    return  thread;
+}
+std::string TcpConnectPool::ErrorTypeToString(ErrorType error)
+{
+    std::string typeStr;
+    switch(error)
+    {
+    case TcpConnectPool::ErrorType::ERROR_ADD_EVENT:
+        typeStr = "Gain event_base Error";
+        break;
+    case TcpConnectPool::ErrorType::ERROR_ACCEPT:
+        typeStr = "Listening error";
+        break;
+    case TcpConnectPool::ErrorType::NOT_ERROE:
+        typeStr = "Not Error";
+        break;
+    case TcpConnectPool::ErrorType::ERROR_BASE_BREAK:
+        typeStr = "Event_base Abnormal exit";
+        break;
+    case TcpConnectPool::ErrorType::ERROR_BUFFEREVENT:
+        typeStr = "New bufferevent fail";
+        break;
+    case TcpConnectPool::ErrorType::ERROR_CONNECT:
+        typeStr = "Connect error";
+        break;
+    case TcpConnectPool::ErrorType::ERROR_UNKNOWO:
+        typeStr = "Connect error";
+        break;
+    }
+    return typeStr;
 }
